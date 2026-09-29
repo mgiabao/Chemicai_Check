@@ -173,7 +173,7 @@ function updateSelection(){const names={from:'Từ',to:'Đến',leather:'Da',for
 function captureFilters(){return Object.fromEntries(['from','to','leather','formula'].map(id=>[id,$(id).value]))}
 function rememberFilters(){const current=captureFilters();if(JSON.stringify(current)!==JSON.stringify(lastFilter)){filterHistory.push({...lastFilter});if(filterHistory.length>40)filterHistory.shift();lastFilter=current}}
 function undoFilters(){if(!filterHistory.length)return;closePicker();const previous=filterHistory.pop();for(const [id,v]of Object.entries(previous))$(id).value=v;lastFilter={...previous};apply(false)}
-function updatePickerLabel(id){const a=chosen(id);$(id+'Trigger').textContent=!a.length?(id==='leather'?'Tất cả loại da ▾':'Tất cả FT ▾'):a.length===1?a[0]+' ▾':a.length+' mục đã chọn ▾'}
+function updatePickerLabel(id){const el=$(id+'Trigger');if(!el)return;const a=chosen(id);el.textContent=!a.length?(id==='leather'?'Tất cả loại da ▾':'Tất cả FT ▾'):a.length===1?a[0]+' ▾':a.length+' mục đã chọn ▾'}
 function closePicker(focus=false){if(!openPicker)return;const id=openPicker;$(id+'Popup').hidden=true;$(id+'Trigger').setAttribute('aria-expanded','false');openPicker=null;if(focus)$(id+'Trigger').focus()}
 function openFilter(id){if(openPicker===id){closePicker();return}closePicker();openPicker=id;draft=[...chosen(id)];$(id+'Search').value='';$(id+'Popup').hidden=false;$(id+'Trigger').setAttribute('aria-expanded','true');renderPicker();$(id+'Search').focus()}
 function matchingOptions(id){const q=$(id+'Search').value.toLocaleLowerCase().trim();return pickerItems[id].filter(([v,l])=>(v+' '+l).toLocaleLowerCase().includes(q))}
