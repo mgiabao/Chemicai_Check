@@ -51,6 +51,16 @@
 @media (max-width:390px){
   main{padding-left:9px;padding-right:9px}.tabs{margin-left:-9px;margin-right:-9px;padding-left:9px;padding-right:9px}.filters{grid-template-columns:1fr;padding:10px}.actions{align-items:stretch}.actions label{font-size:10px}.brand h1{font-size:16px}.header-actions button{font-size:11px}
 }
+
+.ft-detail{margin-top:18px;padding:18px;border:1px solid var(--border);border-radius:16px;background:var(--surface-2)}
+.ft-detail[hidden]{display:none}
+.ft-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+.ft-detail-title{font-size:18px;font-weight:800}
+.ft-detail-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0 18px}
+.ft-detail-card{padding:14px;border-radius:12px;background:var(--surface);border:1px solid var(--border)}
+.ft-detail-card .label{font-size:12px;color:var(--muted);margin-bottom:5px}.ft-detail-card strong{font-size:18px}
+.ft-detail-table{width:100%;overflow:auto}
+@media(max-width:700px){.ft-detail{padding:14px}.ft-detail-grid{grid-template-columns:1fr}.ft-detail-head{align-items:center}}
 </style></head><body>
 <header><div class="brand"><div class="logo">FT</div><div><div class="eyebrow">Consumed Log / Live dashboard</div><h1>FT & Hóa chất</h1></div></div><div class="header-actions"><button id="themeToggle" type="button" aria-label="Chuyển sang giao diện sáng">☀ Sáng</button></div></header>
 <main><div class="topline"><div id="status" class="status" role="status">Đang kết nối Consumed_Log…</div><div class="actions"><label><input id="auto" type="checkbox" checked>Tự cập nhật mỗi 60 giây</label><button id="refresh">Làm mới</button></div></div>
@@ -71,6 +81,7 @@
   <button id="ftFilterReset" type="button">Xóa lọc</button>
 </div>
 <div id="ftTable"></div>
+<div id="ftDetail" class="ft-detail" hidden></div>
 </div></section>
 <section id="chemical" role="tabpanel" aria-labelledby="tab-chemical" hidden><input type="hidden" id="chemSelect"><div class="chemical-workspace"><aside class="panel chemical-nav"><div class="panelhead"><div><h2>Hóa chất</h2><div class="sub" id="chemListCount"></div></div></div><input type="search" id="chemFind" placeholder="Tìm mã hoặc tên hóa chất…" aria-label="Tìm hóa chất"><button id="chemClear" class="all-chem">Xem tất cả hóa chất</button><div id="chemList" class="chemical-list" aria-label="Danh sách hóa chất"></div></aside><div class="chemical-main"><div class="panel"><div class="panelhead"><div><div class="eyebrow" id="chemCode">CHEMICAL INSIGHTS</div><h2 id="chemTitle">Chọn hóa chất để phân tích</h2><div class="sub" id="chemSummary">Chọn một mã trong danh sách bên trái.</div></div><button id="chemBack" hidden>‹ Danh sách FT</button></div><div id="chemMetrics" class="chem-metrics"></div><div id="chemMatchNotice" class="notice" hidden></div><div id="chemGuide" class="scope-note">Tỷ lệ thực tế = kg hóa chất ÷ kg FT của đúng các mẻ có sử dụng hóa chất × 100. Mỗi mẻ FT chỉ được tính một lần. Tỷ lệ này không thay thế định mức công thức chuẩn.</div><div id="chemTable" style="margin-top:22px"></div></div><div class="panel" id="chemRecipePanel" hidden><div class="panelhead"><div><h2 id="chemRecipeTitle">Thành phần pha FT</h2><div class="sub" id="chemRecipeSub"></div></div></div><div id="chemRecipeNote" class="scope-note"></div><div id="chemRecipeTable" style="margin-top:18px"></div><details style="margin-top:24px"><summary>Chi tiết từng mẻ của hóa chất đang chọn</summary><div id="chemBatchTable" style="margin-top:16px"></div><div class="pager"><span id="chemBatchPageInfo"></span><div><button id="chemBatchPrev">Trước</button><button id="chemBatchNext">Sau</button></div></div></details></div></div></div></section>
 <section id="stock" role="tabpanel" aria-labelledby="tab-stock" hidden>
@@ -157,14 +168,41 @@ function renderFT(){
   const lf=$('ftLeatherFilter')?.value||'';
   const ff=$('ftFormulaFilter')?.value||'';
   if(q||lf||ff){
-    a=a.filter(r=>
-      (!q||(r.code+' '+r.name).toLowerCase().includes(q)) &&
-      (!lf||r.leathers.has(lf)) &&
-      (!ff||r.code===ff)
-    );
+    a=a.filter(r=>(!q||(r.code+' '+r.name).toLowerCase().includes(q))&&(!lf||r.leathers.has(lf))&&(!ff||r.code===ff));
   }
   table('ftTable',[['Công thức'],['Tên FT'],['Loại da'],['Lượt FT_IN',1],['Nhập FT · kg',1],['Xuất FT · kg',1],['Hóa chất · kg',1]],
-    a.map(r=>['<button class="code" data-filter="formula" data-value="'+esc(r.code)+'" title="Lọc FT này">'+esc(r.code)+'</button>',esc(r.name),esc([...r.leathers].join(', ')),fmt(r.n,0),fmt(r.ft),fmt(r.out),fmt(r.chem)]))
+    a.map(r=>['<button class="code" data-ft-detail="'+esc(r.code)+'" title="Xem chi tiết FT">'+esc(r.code)+'</button>',esc(r.name),esc([...r.leathers].join(', ')),fmt(r.n,0),fmt(r.ft),fmt(r.out),fmt(r.chem)]));
+  const detail=$('ftDetail');
+  if(detail?.dataset.code && !a.some(r=>r.code===detail.dataset.code)){
+    detail.hidden=true;detail.innerHTML='';delete detail.dataset.code;
+  }
+}
+function renderFTDetail(code){
+  const detail=$('ftDetail');
+  if(!detail)return;
+  const source=filtered.filter(r=>r.ft===code);
+  if(!source.length){detail.hidden=true;return}
+  const ftRows=source.filter(r=>r.type==='FT_IN');
+  const outRows=source.filter(r=>r.type==='FT_OUT');
+  const chemRows=source.filter(r=>r.type==='CHEM_OUT');
+  const name=source.find(r=>r.ftName)?.ftName||'';
+  const leatherMap=new Map();
+  for(const r of ftRows) leatherMap.set(r.leather,(leatherMap.get(r.leather)||0)+r.qty);
+  const chemMap=new Map();
+  for(const r of chemRows){
+    const key=r.item||r.name||'Chưa xác định';
+    const old=chemMap.get(key)||{item:r.item,name:r.name,qty:0};
+    old.qty+=-r.qty;chemMap.set(key,old);
+  }
+  const totalFT=sum(ftRows,r=>r.qty),totalOut=sum(outRows,r=>-r.qty),totalChem=sum(chemRows,r=>-r.qty);
+  const leatherRows=[...leatherMap].sort((a,b)=>b[1]-a[1]);
+  const chemData=[...chemMap.values()].sort((a,b)=>b.qty-a.qty);
+  detail.dataset.code=code;detail.hidden=false;
+  detail.innerHTML='<div class="ft-detail-head"><div><div class="eyebrow">CHI TIẾT CÔNG THỨC</div><div class="ft-detail-title">'+esc(code)+(name?' · '+esc(name):'')+'</div><div class="sub">Dữ liệu theo bộ lọc ngày và bộ lọc hiện tại của tab Phân tích FT.</div></div><button type="button" data-ft-detail-close>Đóng</button></div>'+
+    '<div class="ft-detail-grid"><div class="ft-detail-card"><div class="label">Số lượng FT nhập</div><strong>'+fmt(totalFT)+' kg</strong><div class="sub">'+fmt(ftRows.length,0)+' lượt FT_IN</div></div><div class="ft-detail-card"><div class="label">Hóa chất tạo FT</div><strong>'+fmt(totalChem)+' kg</strong><div class="sub">'+fmt(chemData.length,0)+' loại hóa chất</div></div><div class="ft-detail-card"><div class="label">FT xuất</div><strong>'+fmt(totalOut)+' kg</strong><div class="sub">'+fmt(outRows.length,0)+' lượt FT_OUT</div></div></div>'+
+    '<h3>Loại da theo FT</h3><div class="ft-detail-table" style="margin-top:10px">'+(leatherRows.length?'<table><thead><tr><th>Loại da</th><th class="num">Số lượng FT · kg</th></tr></thead><tbody>'+leatherRows.map(([l,v])=>'<tr><td>'+esc(l)+'</td><td class="num">'+fmt(v)+'</td></tr>').join('')+'</tbody></table>':'<div class="empty">Không có dữ liệu loại da.</div>')+'</div>'+
+    '<h3 style="margin-top:20px">Hóa chất tạo nên FT</h3><div class="ft-detail-table" style="margin-top:10px">'+(chemData.length?'<table><thead><tr><th>Item Number</th><th>Tên hóa chất</th><th class="num">Số lượng · kg</th></tr></thead><tbody>'+chemData.map(r=>'<tr><td>'+esc(r.item||'—')+'</td><td>'+esc(r.name||'—')+'</td><td class="num">'+fmt(r.qty)+'</td></tr>').join('')+'</tbody></table>':'<div class="empty">Không có CHEM_OUT gắn với FT này trong phạm vi dữ liệu đang chọn.</div>')+'</div>';
+  detail.scrollIntoView({behavior:typeof matchMedia==='function'&&matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'nearest'});
 }
 function populateFTFilters(){
   const lf=$('ftLeatherFilter'),ff=$('ftFormulaFilter');
@@ -213,7 +251,7 @@ function renderPicker(){if(!openPicker)return;const id=openPicker,items=matching
 function pickerAction(action,id){if(openPicker!==id)return;if(action==='all'){draft=unique([...draft,...matchingOptions(id).map(x=>x[0])]);renderPicker()}if(action==='clear'){draft=[];renderPicker()}if(action==='cancel')closePicker(true);if(action==='apply'){$(id).value=draft.join('\u001f');closePicker(true);apply()}}
 let theme='dark';try{theme=localStorage.getItem('ft-dashboard-theme')||'dark'}catch{}function setTheme(t){theme=t==='light'?'light':'dark';document.documentElement.dataset.theme=theme;$('themeToggle').textContent=theme==='dark'?'☀ Sáng':'☾ Tối';$('themeToggle').setAttribute('aria-label',theme==='dark'?'Chuyển sang giao diện sáng':'Chuyển sang giao diện tối');try{localStorage.setItem('ft-dashboard-theme',theme)}catch{}}setTheme(theme);$('themeToggle').onclick=()=>setTheme(theme==='dark'?'light':'dark');
 function drill(target){const t=target.closest('[data-filter],[data-from],[data-clear]');if(!t)return;if(t.dataset.clear){const id=t.dataset.clear;if(t.dataset.remove&&['leather','formula'].includes(id))$(id).value=chosen(id).filter(v=>v!==t.dataset.remove).join('\u001f');else $(id).value='';apply()}else if(t.dataset.from){$('from').value=t.dataset.from;$('to').value=t.dataset.to;apply()}else if(t.dataset.filter){$(t.dataset.filter).value=t.dataset.value;if(t.dataset.filter==='chemSelect')selectChemical(t.dataset.value);else apply()}$('tooltip').hidden=true}
-document.addEventListener('click',e=>drill(e.target));document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.chart-point')){e.preventDefault();drill(e.target)}if(e.key==='Escape')$('tooltip').hidden=true;if(['ArrowLeft','ArrowRight'].includes(e.key)&&e.target.matches('[role=tab]')){e.preventDefault();const tabs=[...document.querySelectorAll('[role=tab]')],i=tabs.indexOf(e.target),next=tabs[(i+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length];next.click();next.focus()}});
+document.addEventListener('click',e=>{const d=e.target.closest('[data-ft-detail]');if(d){renderFTDetail(d.dataset.ftDetail);return}if(e.target.closest('[data-ft-detail-close]')){$('ftDetail').hidden=true;return}drill(e.target)});document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.chart-point')){e.preventDefault();drill(e.target)}if(e.key==='Escape')$('tooltip').hidden=true;if(['ArrowLeft','ArrowRight'].includes(e.key)&&e.target.matches('[role=tab]')){e.preventDefault();const tabs=[...document.querySelectorAll('[role=tab]')],i=tabs.indexOf(e.target),next=tabs[(i+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length];next.click();next.focus()}});
 function showTip(t,x,y){$('tooltip').textContent=t.dataset.tip;$('tooltip').hidden=false;$('tooltip').style.left=Math.max(8,Math.min(x+15,window.innerWidth-270))+'px';$('tooltip').style.top=Math.max(8,Math.min(y+15,window.innerHeight-130))+'px'}
 document.addEventListener('pointermove',e=>{const t=e.target.closest('[data-tip]');if(t)showTip(t,e.clientX,e.clientY);else $('tooltip').hidden=true});document.addEventListener('focusin',e=>{const t=e.target.closest('[data-tip]');if(t){const r=t.getBoundingClientRect();showTip(t,r.x,r.y)}});document.addEventListener('focusout',()=>{$('tooltip').hidden=true});
 
